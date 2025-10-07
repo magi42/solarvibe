@@ -1,0 +1,294 @@
+:root {
+  color-scheme: dark;
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  font-size: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at 20% 20%, #1c2331, #060608);
+  color: #f5f7ff;
+  overflow: hidden;
+}
+
+#canvas-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+canvas {
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  right: auto;
+  bottom: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: min(420px, calc(100% - 3rem));
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-column {
+  background: rgba(6, 8, 18, 0.7);
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.hud h1,
+.hud h2 {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.hud-header h1 {
+  margin: 0;
+}
+
+.hud h1 {
+  font-size: 1.25rem;
+}
+
+.hud h2 {
+  font-size: 1.1rem;
+}
+
+.hint {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  color: #aeb7d6;
+}
+
+.language-switch {
+  display: inline-flex;
+  position: relative;
+}
+
+.language-button {
+  background: rgba(120, 160, 255, 0.18);
+  border: 1px solid rgba(120, 160, 255, 0.45);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.language-button span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.language-button .language-flag {
+  font-size: 1.1rem;
+}
+
+.language-button .language-caret {
+  font-size: 0.7rem;
+  opacity: 0.85;
+}
+
+.language-button .language-name {
+  font-size: 0.9rem;
+}
+
+.language-button:hover,
+.language-button:focus-visible {
+  background: rgba(120, 160, 255, 0.38);
+  border-color: rgba(120, 160, 255, 0.7);
+}
+
+.language-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3rem);
+  background: rgba(6, 8, 18, 0.95);
+  border: 1px solid rgba(120, 160, 255, 0.35);
+  border-radius: 0.6rem;
+  padding: 0.35rem;
+  display: none;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 9.5rem;
+  z-index: 40;
+}
+
+.language-menu.open {
+  display: flex;
+}
+
+.language-option {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0.3rem 0.55rem;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.language-option:hover,
+.language-option:focus-visible {
+  background: rgba(120, 160, 255, 0.25);
+}
+
+.language-option.active {
+  background: rgba(120, 160, 255, 0.35);
+  font-weight: 600;
+}
+
+.language-option span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.language-option .language-flag {
+  font-size: 1.05rem;
+}
+
+.stat {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+
+#speed-slider {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+.transport-controls {
+  margin-top: 0.6rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.transport-controls button {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.time-buttons {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.time-buttons button {
+  padding: 0.15rem 0.28rem;
+  font-size: 0.8rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.time-buttons .time-now {
+  font-weight: 600;
+  margin: 0 0.28rem;
+}
+
+.selection {
+  min-height: 6rem;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+}
+
+.selection strong {
+  font-size: 1.05rem;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+button {
+  background: rgba(120, 160, 255, 0.15);
+  color: inherit;
+  border: 1px solid rgba(120, 160, 255, 0.35);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+button:hover {
+  background: rgba(120, 160, 255, 0.35);
+  border-color: rgba(120, 160, 255, 0.65);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.info-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #c7d1f5;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 960px) {
+  .hud {
+    top: 1rem;
+    left: 1rem;
+    max-width: min(420px, calc(100% - 2rem));
+  }
+
+  .hud-column {
+    padding: 0.85rem 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hud {
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    max-width: none;
+    gap: 0.75rem;
+  }
+
+  .time-buttons {
+    justify-content: flex-start;
+  }
+}

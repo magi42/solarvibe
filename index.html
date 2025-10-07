@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aurinkokunnan 3D-näkymä</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.156.1/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="canvas-container"></div>
+    <section id="hud" class="hud">
+      <div class="hud-column">
+        <div class="hud-header">
+          <h1 id="title"></h1>
+          <div class="language-switch" id="language-switch">
+            <button type="button" id="language-button" class="language-button" aria-haspopup="true" aria-expanded="false" aria-controls="language-menu"></button>
+            <div id="language-menu" class="language-menu"></div>
+          </div>
+        </div>
+        <p class="hint" id="hint-controls"></p>
+        <p class="hint" id="hint-time"></p>
+        <div class="stat"><span id="label-sim-time"></span>: <span id="sim-time"></span></div>
+        <div class="stat"><span id="label-speed"></span>: <span id="speed-label"></span></div>
+        <input id="speed-slider" type="range" min="0" max="13" step="1" value="0" />
+        <div class="transport-controls">
+          <button id="play-button" type="button" aria-label="Käynnistä simulaatio">&#9658;</button>
+          <button id="pause-button" type="button" aria-label="Pysäytä simulaatio">&#10074;&#10074;</button>
+        </div>
+        <div class="time-buttons" id="time-buttons">
+          <button type="button" data-adjust="-31557600">&#x2212;Y</button>
+          <button type="button" data-adjust="-2592000">&#x2212;M</button>
+          <button type="button" data-adjust="-604800">&#x2212;W</button>
+          <button type="button" data-adjust="-86400">&#x2212;D</button>
+          <button type="button" data-adjust="-3600">&#x2212;H</button>
+          <button id="now-button" type="button" data-action="now" class="time-now"></button>
+          <button type="button" data-adjust="3600">+H</button>
+          <button type="button" data-adjust="86400">+D</button>
+          <button type="button" data-adjust="604800">+W</button>
+          <button type="button" data-adjust="2592000">+M</button>
+          <button type="button" data-adjust="31557600">+Y</button>
+        </div>
+      </div>
+      <div class="hud-column">
+        <h2 id="selection-title"></h2>
+        <div id="selection" class="selection"></div>
+        <div class="selection-actions">
+          <button id="lock-button" type="button"></button>
+          <button id="unlock-button" type="button"></button>
+        </div>
+      </div>
+      <div class="hud-column">
+        <h2 id="instructions-title"></h2>
+        <ul class="info-list" id="instructions-list"></ul>
+      </div>
+    </section>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
