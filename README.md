@@ -22,6 +22,7 @@ python3 -m http.server 8080
 Textures load from `data/textures`, so keep that directory relative to the HTML file when deploying.
 
 ## Development Notes
+- Localized UI copy lives in `strings.js` (LOCALES, DESCRIPTIONS, language metadata).
 - Source entry point: `main.js` (Three.js scene setup, simulation loop, localization state).
 - Styling: `styles.css` defines the compact HUD layout tuned for multiple languages.
 - Planetary and satellite metadata (radii, orbital elements, descriptive copy) lives in `main.js`; adjust there when adding bodies.

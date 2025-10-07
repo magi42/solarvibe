@@ -23,5 +23,6 @@
 
 ## Useful References
 - Main logic: `main.js` (locale data, body definitions, rendering loop, orbit math).
+- Localized strings: `strings.js` (LOCALES, DESCRIPTIONS, and language metadata).
 - Styles: `styles.css` (HUD layout, button sizing, typography).
 - Static assets: `docs/img/` for documentation imagery, `data/textures/` for rendering.
