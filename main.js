@@ -8,9 +8,17 @@ const MIN_BODY_RADIUS = 0.35;
 const J2000 = Date.UTC(2000, 0, 1, 12, 0, 0);
 const TWO_PI = Math.PI * 2;
 const MIN_MOON_ORBIT_SCALE = 12;
-const MAX_MOON_ORBIT_SCALE = 600;
+const MAX_MOON_ORBIT_SCALE = 900;
 const MOON_CLEARANCE = 0.12;
 const MARS_MOON_SCALE = 0.25;
+const JUPITER_MOON_VISUAL_SCALE = 2.0;
+const JUPITER_MOON_MIN_RADIUS = 0.32;
+const JUPITER_MOON_SURFACE_MULTIPLIERS = {
+  io: 1,
+  europa: 2,
+  ganymede: 3,
+  callisto: 5,
+};
 const OUTER_PLANETS = new Set(['jupiter', 'saturn', 'uranus', 'neptune']);
 const OUTER_SURFACE_FACTOR_MIN = 1;
 const OUTER_SURFACE_FACTOR_MAX = 5;
@@ -696,7 +704,31 @@ addStarfield();
 
 const clock = new THREE.Clock();
 let simTimeMs = Date.now();
-const SPEED_STEPS = [1, 5, 10, 50, 100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 1_000_000, 10_000_000, 100_000_000];
+const SPEED_STEPS = [
+  1,
+  3,
+  10,
+  30,
+  100,
+  300,
+  1_000,
+  3_000,
+  10_000,
+  30_000,
+  100_000,
+  300_000,
+  1_000_000,
+  3_000_000,
+  10_000_000,
+  30_000_000,
+  100_000_000,
+  300_000_000,
+  1_000_000_000,
+  3_000_000_000,
+  10_000_000_000,
+  30_000_000_000,
+  100_000_000_000,
+];
 let speedStep = 0;
 let simSpeed = speedFromStep(speedStep);
 let isPaused = false;
@@ -835,10 +867,27 @@ function computeRotationSpeed(hours) {
 function computeVisualRadii(definitions) {
   const radii = new Map();
   for (const def of definitions) {
-    let radius = def.renderRadius ?? Math.max((def.radiusKm / KM_IN_AU) * DISTANCE_SCALE * SIZE_MULTIPLIER, MIN_BODY_RADIUS);
-    if (def.type === 'moon' && def.parentId === 'mars') {
-      radius *= MARS_MOON_SCALE;
+    let radius;
+    if (def.renderRadius != null) {
+      radius = def.renderRadius;
+    } else {
+      radius = (def.radiusKm / KM_IN_AU) * DISTANCE_SCALE * SIZE_MULTIPLIER;
     }
+
+    if (def.type === 'moon') {
+      if (def.parentId === 'mars') {
+        radius *= MARS_MOON_SCALE;
+      }
+      if (def.parentId === 'jupiter') {
+        radius *= JUPITER_MOON_VISUAL_SCALE;
+        radius = Math.max(radius, JUPITER_MOON_MIN_RADIUS);
+      }
+    }
+
+    if (def.renderRadius == null && !(def.type === 'moon' && def.parentId === 'jupiter')) {
+      radius = Math.max(radius, MIN_BODY_RADIUS);
+    }
+
     radii.set(def.id, radius);
   }
   return radii;
@@ -871,21 +920,81 @@ function computeOuterMoonScaling(definitions, visualRadiusMap) {
 function buildBodies() {
   const definitions = getBodyDefinitions();
   const visualRadiusMap = computeVisualRadii(definitions);
-const outerMoonScaling = computeOuterMoonScaling(definitions, visualRadiusMap);
-const map = new Map();
-const created = [];
+  const outerMoonScaling = computeOuterMoonScaling(definitions, visualRadiusMap);
+  const map = new Map();
+  const created = [];
 
-for (const def of definitions) {
-  const parent = def.parentId ? map.get(def.parentId) : null;
-  if (def.id === 'earth') {
-    def.initialRotationDeg = computeEarthInitialRotation();
+  for (const def of definitions) {
+    const parent = def.parentId ? map.get(def.parentId) : null;
+    if (def.id === 'earth') {
+      def.initialRotationDeg = computeEarthInitialRotation();
+    }
+    const body = createBody(def, parent, visualRadiusMap, outerMoonScaling);
+    map.set(def.id, body);
+    created.push(body);
   }
-  const body = createBody(def, parent, visualRadiusMap, outerMoonScaling);
-  map.set(def.id, body);
-  created.push(body);
-}
 
   return created;
+}
+
+function computeOrbitPlaneNormal(orbit) {
+  if (!orbit) return new THREE.Vector3(0, 1, 0);
+
+  const eccentricity = orbit.eccentricity ?? 0;
+  const semiMajorAxis = orbit.semiMajorAxisAu ?? 0;
+  if (semiMajorAxis === 0) return new THREE.Vector3(0, 1, 0);
+
+  const sampleAngles = [0, Math.PI / 2];
+  const positions = sampleAngles.map((f) => {
+    const radiusAu = (semiMajorAxis * (1 - eccentricity ** 2)) / (1 + eccentricity * Math.cos(f));
+    return orbitalToCartesian(radiusAu, f, orbit);
+  });
+
+  const normal = new THREE.Vector3().copy(positions[0]).cross(positions[1]);
+  if (normal.lengthSq() === 0) {
+    return new THREE.Vector3(0, 1, 0);
+  }
+  return normal.normalize();
+}
+
+function computeSaturnRingNormal(axialTiltDeg = 0) {
+  const normal = new THREE.Vector3(0, 0, 1);
+  normal.applyEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+  normal.applyEuler(new THREE.Euler(THREE.MathUtils.degToRad(axialTiltDeg), 0, 0));
+  return normal.normalize();
+}
+
+function computeOrbitCorrection(def, parent) {
+  if (!def.orbit || !parent?.data) return null;
+  if (parent.data.id !== 'saturn') return null;
+
+  const orbitNormal = computeOrbitPlaneNormal(def.orbit);
+  const targetNormal = computeSaturnRingNormal(parent.data.axialTiltDeg ?? 0);
+
+  if (orbitNormal.lengthSq() === 0 || targetNormal.lengthSq() === 0) {
+    return null;
+  }
+
+  const normalizedOrbit = orbitNormal.clone().normalize();
+  const normalizedTarget = targetNormal.clone().normalize();
+  const dot = normalizedOrbit.dot(normalizedTarget);
+  if (dot >= 0.9999) {
+    return null;
+  }
+
+  const correction = new THREE.Quaternion();
+  if (dot <= -0.9999) {
+    const axis = new THREE.Vector3(1, 0, 0).cross(normalizedOrbit);
+    if (axis.lengthSq() < 1e-6) {
+      axis.set(0, 1, 0);
+    }
+    axis.normalize();
+    correction.setFromAxisAngle(axis, Math.PI);
+  } else {
+    correction.setFromUnitVectors(normalizedOrbit, normalizedTarget);
+  }
+
+  return correction;
 }
 
 function createBody(def, parent, visualRadiusMap, outerMoonScaling) {
@@ -942,23 +1051,31 @@ function createBody(def, parent, visualRadiusMap, outerMoonScaling) {
       const scalingInfo = outerMoonScaling.get(parent.data.id);
       if (scalingInfo && scalingInfo.max > 0) {
         const { min, max, parentRadius: outerParentRadius } = scalingInfo;
-        let normalized = 0;
-        if (max > min) {
-          normalized = (baseDistance - min) / (max - min);
-        }
-        normalized = THREE.MathUtils.clamp(normalized, 0, 1);
-
         let targetCenterDistance;
-        if (parent.data?.ring) {
-          const ringOuterScale = parent.data.ring.outerScale ?? 2.25;
-          const ringOuterRadius = outerParentRadius * ringOuterScale;
-          const ringBuffer = outerParentRadius * 0.2;
-          const minDistanceFromCenter = ringOuterRadius + ringBuffer;
-          const maxDistanceFromCenter = Math.max(minDistanceFromCenter, outerParentRadius * 6);
-          targetCenterDistance = THREE.MathUtils.lerp(minDistanceFromCenter, maxDistanceFromCenter, normalized);
+
+        const jupiterMultiplier =
+          parent.data.id === 'jupiter' ? JUPITER_MOON_SURFACE_MULTIPLIERS[def.id] : undefined;
+
+        if (jupiterMultiplier != null) {
+          targetCenterDistance = outerParentRadius * (1 + jupiterMultiplier);
         } else {
-          const surfaceFactor = OUTER_SURFACE_FACTOR_MIN + normalized * (OUTER_SURFACE_FACTOR_MAX - OUTER_SURFACE_FACTOR_MIN);
-          targetCenterDistance = outerParentRadius + surfaceFactor * outerParentRadius;
+          let normalized = 0;
+          if (max > min) {
+            normalized = (baseDistance - min) / (max - min);
+          }
+          normalized = THREE.MathUtils.clamp(normalized, 0, 1);
+
+          if (parent.data?.ring) {
+            const ringOuterScale = parent.data.ring.outerScale ?? 2.25;
+            const ringOuterRadius = outerParentRadius * ringOuterScale;
+            const ringBuffer = outerParentRadius * 0.2;
+            const minDistanceFromCenter = ringOuterRadius + ringBuffer;
+            const maxDistanceFromCenter = Math.max(minDistanceFromCenter, outerParentRadius * 6);
+            targetCenterDistance = THREE.MathUtils.lerp(minDistanceFromCenter, maxDistanceFromCenter, normalized);
+          } else {
+            const surfaceFactor = OUTER_SURFACE_FACTOR_MIN + normalized * (OUTER_SURFACE_FACTOR_MAX - OUTER_SURFACE_FACTOR_MIN);
+            targetCenterDistance = outerParentRadius + surfaceFactor * outerParentRadius;
+          }
         }
 
         orbitScale = targetCenterDistance / baseDistance;
@@ -972,9 +1089,11 @@ function createBody(def, parent, visualRadiusMap, outerMoonScaling) {
     orbitScale = Math.min(orbitScale, MAX_MOON_ORBIT_SCALE);
   }
 
+  const orbitCorrection = computeOrbitCorrection(def, parent);
+
   let orbitLine = null;
   if (def.orbit) {
-    orbitLine = buildOrbitLine(def.orbit, orbitScale, minDistance);
+    orbitLine = buildOrbitLine(def.orbit, orbitScale, minDistance, orbitCorrection);
     scene.add(orbitLine);
   }
 
@@ -991,12 +1110,16 @@ function createBody(def, parent, visualRadiusMap, outerMoonScaling) {
     orbitScale,
     minDistance,
     rotationSpeed: computeRotationSpeed(def.rotationPeriodHours),
+    orbitCorrection,
     initialRotationDeg: def.initialRotationDeg ?? 0,
     update(date, simDeltaSeconds) {
       if (!def.orbit) {
         this.position.set(0, 0, 0);
       } else {
         const relative = resolveOrbit(def.orbit, date, this.orbitScale, this.minDistance);
+        if (this.orbitCorrection) {
+          relative.applyQuaternion(this.orbitCorrection);
+        }
         this.position.copy(relative);
         if (parent) {
           this.position.add(parent.position);
@@ -1029,7 +1152,7 @@ function createBody(def, parent, visualRadiusMap, outerMoonScaling) {
   return body;
 }
 
-function buildOrbitLine(orbit, scale = 1, minDistance = 0) {
+function buildOrbitLine(orbit, scale = 1, minDistance = 0, orientationQuat = null) {
   const segments = 512;
   const points = [];
   for (let i = 0; i <= segments; i += 1) {
@@ -1039,6 +1162,9 @@ function buildOrbitLine(orbit, scale = 1, minDistance = 0) {
     localPos.multiplyScalar(DISTANCE_SCALE * scale);
     if (minDistance > 0 && localPos.length() < minDistance) {
       localPos.setLength(minDistance);
+    }
+    if (orientationQuat) {
+      localPos.applyQuaternion(orientationQuat);
     }
     points.push(localPos);
   }
@@ -1638,12 +1764,12 @@ function getBodyDefinitions() {
       descriptionKey: 'io',
       orbit: {
         semiMajorAxisAu: 0.002819,
-        eccentricity: 0.0041,
-        inclinationDeg: 0.036,
-        longitudeAscendingNodeDeg: 43.977,
-        argumentOfPeriapsisDeg: 84.129,
-        meanAnomalyAtEpochDeg: 342.021,
-        periodDays: 1.769,
+        eccentricity: 0.004879458023067604,
+        inclinationDeg: 2.212625896929864,
+        longitudeAscendingNodeDeg: 336.8522496700484,
+        argumentOfPeriapsisDeg: 67.08346085353269,
+        meanAnomalyAtEpochDeg: 334.24284160276244,
+        periodDays: 1.7718964834223734,
       },
     },
     {
@@ -1657,12 +1783,12 @@ function getBodyDefinitions() {
       descriptionKey: 'europa',
       orbit: {
         semiMajorAxisAu: 0.004484,
-        eccentricity: 0.009,
-        inclinationDeg: 0.466,
-        longitudeAscendingNodeDeg: 219.106,
-        argumentOfPeriapsisDeg: 88.970,
-        meanAnomalyAtEpochDeg: 171.016,
-        periodDays: 3.551,
+        eccentricity: 0.009789867263725448,
+        inclinationDeg: 1.7909887092581105,
+        longitudeAscendingNodeDeg: 332.6282575700165,
+        argumentOfPeriapsisDeg: 254.12181778318993,
+        meanAnomalyAtEpochDeg: 345.93160032652116,
+        periodDays: 3.5531831164380687,
       },
     },
     {
@@ -1676,12 +1802,12 @@ function getBodyDefinitions() {
       descriptionKey: 'ganymede',
       orbit: {
         semiMajorAxisAu: 0.007155,
-        eccentricity: 0.0013,
-        inclinationDeg: 0.177,
-        longitudeAscendingNodeDeg: 63.552,
-        argumentOfPeriapsisDeg: 192.417,
-        meanAnomalyAtEpochDeg: 316.518,
-        periodDays: 7.155,
+        eccentricity: 0.0014109763895793213,
+        inclinationDeg: 2.214133473599043,
+        longitudeAscendingNodeDeg: 343.173070881089,
+        argumentOfPeriapsisDeg: 316.987280706706,
+        meanAnomalyAtEpochDeg: 279.8660625759672,
+        periodDays: 7.156822593270807,
       },
     },
     {
@@ -1695,12 +1821,12 @@ function getBodyDefinitions() {
       descriptionKey: 'callisto',
       orbit: {
         semiMajorAxisAu: 0.012585,
-        eccentricity: 0.0074,
-        inclinationDeg: 0.192,
-        longitudeAscendingNodeDeg: 298.848,
-        argumentOfPeriapsisDeg: 52.643,
-        meanAnomalyAtEpochDeg: 181.408,
-        periodDays: 16.689,
+        eccentricity: 0.007426728567527058,
+        inclinationDeg: 2.0169160591039708,
+        longitudeAscendingNodeDeg: 337.9427202690351,
+        argumentOfPeriapsisDeg: 16.475597133407142,
+        meanAnomalyAtEpochDeg: 84.7704510799774,
+        periodDays: 16.692158624085896,
       },
     },
     {
@@ -1743,13 +1869,13 @@ function getBodyDefinitions() {
       descriptionKey: 'mimas',
       renderRadius: 0.45,
       orbit: {
-        semiMajorAxisAu: 0.001240252,
-        eccentricity: 0.0196,
-        inclinationDeg: 1.6,
-        longitudeAscendingNodeDeg: 113.6,
-        argumentOfPeriapsisDeg: 238.7,
-        meanAnomalyAtEpochDeg: 15.0,
-        periodDays: 0.942,
+        semiMajorAxisAu: 0.001247966,
+        eccentricity: 0.023254490718893114,
+        inclinationDeg: 27.00219363533106,
+        longitudeAscendingNodeDeg: 172.05495885813778,
+        argumentOfPeriapsisDeg: 111.48418723684985,
+        meanAnomalyAtEpochDeg: 34.63865465393197,
+        periodDays: 0.9524895104243762,
       },
     },
     {
@@ -1763,13 +1889,13 @@ function getBodyDefinitions() {
       descriptionKey: 'enceladus',
       renderRadius: 0.5,
       orbit: {
-        semiMajorAxisAu: 0.001591179,
-        eccentricity: 0.0047,
-        inclinationDeg: 1.9,
-        longitudeAscendingNodeDeg: 113.6,
-        argumentOfPeriapsisDeg: 116.7,
-        meanAnomalyAtEpochDeg: 220.0,
-        periodDays: 1.370,
+        semiMajorAxisAu: 0.001598086,
+        eccentricity: 0.00782397030001267,
+        inclinationDeg: 28.051902047724234,
+        longitudeAscendingNodeDeg: 169.5063751089069,
+        argumentOfPeriapsisDeg: 135.52198957313303,
+        meanAnomalyAtEpochDeg: 6.905304171394682,
+        periodDays: 1.3802453328200734,
       },
     },
     {
@@ -1783,13 +1909,13 @@ function getBodyDefinitions() {
       descriptionKey: 'tethys',
       renderRadius: 0.55,
       orbit: {
-        semiMajorAxisAu: 0.001969406,
-        eccentricity: 0.0001,
-        inclinationDeg: 1.1,
-        longitudeAscendingNodeDeg: 113.6,
-        argumentOfPeriapsisDeg: 270.0,
-        meanAnomalyAtEpochDeg: 36.0,
-        periodDays: 1.888,
+        semiMajorAxisAu: 0.001976283,
+        eccentricity: 0.0022014883113555092,
+        inclinationDeg: 27.22120628492098,
+        longitudeAscendingNodeDeg: 167.9993998500507,
+        argumentOfPeriapsisDeg: 150.96743452966223,
+        meanAnomalyAtEpochDeg: 357.46756390123517,
+        periodDays: 1.8981465954591739,
       },
     },
     {
@@ -1803,13 +1929,13 @@ function getBodyDefinitions() {
       descriptionKey: 'dione',
       renderRadius: 0.55,
       orbit: {
-        semiMajorAxisAu: 0.002522736,
-        eccentricity: 0.0022,
-        inclinationDeg: 0.9,
-        longitudeAscendingNodeDeg: 113.6,
-        argumentOfPeriapsisDeg: 180.0,
-        meanAnomalyAtEpochDeg: 120.0,
-        periodDays: 2.737,
+        semiMajorAxisAu: 0.002528997,
+        eccentricity: 0.0038068490726938563,
+        inclinationDeg: 28.041308782726794,
+        longitudeAscendingNodeDeg: 169.4701294979719,
+        argumentOfPeriapsisDeg: 155.42367458880864,
+        meanAnomalyAtEpochDeg: 341.5604040819433,
+        periodDays: 2.747758095465961,
       },
     },
     {
@@ -1823,13 +1949,13 @@ function getBodyDefinitions() {
       descriptionKey: 'rhea',
       renderRadius: 0.6,
       orbit: {
-        semiMajorAxisAu: 0.003523499,
-        eccentricity: 0.0010,
-        inclinationDeg: 0.3,
-        longitudeAscendingNodeDeg: 113.6,
-        argumentOfPeriapsisDeg: 45.0,
-        meanAnomalyAtEpochDeg: 210.0,
-        periodDays: 4.518,
+        semiMajorAxisAu: 0.003520505,
+        eccentricity: 0.0013615920996962673,
+        inclinationDeg: 28.241507765885782,
+        longitudeAscendingNodeDeg: 168.98424305946335,
+        argumentOfPeriapsisDeg: 188.92715115459765,
+        meanAnomalyAtEpochDeg: 183.7469268557453,
+        periodDays: 4.512981388162771,
       },
     },
     {
@@ -1843,13 +1969,13 @@ function getBodyDefinitions() {
       descriptionKey: 'titan',
       renderRadius: 0.85,
       orbit: {
-        semiMajorAxisAu: 0.008167696,
-        eccentricity: 0.0288,
-        inclinationDeg: 0.3,
-        longitudeAscendingNodeDeg: 113.7,
-        argumentOfPeriapsisDeg: 180.0,
-        meanAnomalyAtEpochDeg: 300.0,
-        periodDays: 15.945,
+        semiMajorAxisAu: 0.008162535,
+        eccentricity: 0.029040662450052376,
+        inclinationDeg: 27.718340750856644,
+        longitudeAscendingNodeDeg: 169.23906927048893,
+        argumentOfPeriapsisDeg: 164.15095124297517,
+        meanAnomalyAtEpochDeg: 163.69436481455034,
+        periodDays: 15.93285571022866,
       },
     },
     {
@@ -1863,13 +1989,13 @@ function getBodyDefinitions() {
       descriptionKey: 'iapetus',
       renderRadius: 0.7,
       orbit: {
-        semiMajorAxisAu: 0.023802612,
-        eccentricity: 0.0283,
-        inclinationDeg: 7.5,
-        longitudeAscendingNodeDeg: 113.7,
-        argumentOfPeriapsisDeg: 90.0,
-        meanAnomalyAtEpochDeg: 45.0,
-        periodDays: 79.3215,
+        semiMajorAxisAu: 0.023810451,
+        eccentricity: 0.02813722580864883,
+        inclinationDeg: 17.238667187294606,
+        longitudeAscendingNodeDeg: 139.68247227332336,
+        argumentOfPeriapsisDeg: 229.25704443877794,
+        meanAnomalyAtEpochDeg: 208.46801128737624,
+        periodDays: 79.37933700695002,
       },
     },
     {
